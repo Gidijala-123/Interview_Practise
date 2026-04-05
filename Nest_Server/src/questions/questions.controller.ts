@@ -1,8 +1,6 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { Controller, Get, Query } from '@nestjs/common';
 import { QuestionsService } from './questions.service';
 
-@UseGuards(AuthGuard('jwt'))
 @Controller('questions')
 export class QuestionsController {
   constructor(private questionsService: QuestionsService) { }
