@@ -5,9 +5,6 @@ import { QuestionsService } from './questions.service';
 export class QuestionsController {
   constructor(private questionsService: QuestionsService) { }
 
-  /**
-   * GET /api/questions?domain=Frontend&difficulty=Medium&type=mcq&limit=10
-   */
   @Get()
   getQuestions(
     @Query('domain') domain?: string,
@@ -19,7 +16,7 @@ export class QuestionsController {
       domain,
       difficulty,
       type,
-      limit: limit ? parseInt(limit) : 10,
+      limit: limit ? parseInt(limit) : 50,
     });
   }
 }

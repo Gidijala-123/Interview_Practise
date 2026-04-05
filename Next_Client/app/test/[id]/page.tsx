@@ -6,9 +6,45 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useQuizStore } from '@/store/quiz.store';
 import { Timer } from '@/components/Timer';
 import { CodeEditor } from '@/components/CodeEditor';
+import { CodeRunner } from '@/components/CodeRunner';
 import type { Question, Language } from '@/lib/types';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333/api';
+
+function buildLocalResult(payload: any, questions: any[]) {
+  let totalScore = 0, maxScore = 0;
+  const categoryMap: Record<string, { correct: number; total: number }> = {};
+
+  const answers = payload.answers.map((ans: any) => {
+    const q = questions.find((q) => q._id === ans.questionId);
+    const points = q?.points || 10;
+    maxScore += points;
+    const isCorrect = q?.type === 'mcq' ? ans.selectedOption === q.correctAnswer : false;
+    if (isCorrect) totalScore += points;
+    const tag = q?.tags?.[0] || 'General';
+    if (!categoryMap[tag]) categoryMap[tag] = { correct: 0, total: 0 };
+    categoryMap[tag].total++;
+    if (isCorrect) categoryMap[tag].correct++;
+    return { ...ans, isCorrect, pointsEarned: isCorrect ? points : 0 };
+  });
+
+  return {
+    _id: 'local',
+    domain: payload.domain,
+    difficulty: payload.difficulty,
+    experienceLevel: payload.experienceLevel,
+    answers,
+    totalScore,
+    maxScore,
+    percentage: maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0,
+    categoryBreakdown: Object.entries(categoryMap).map(([category, d]) => ({
+      category, correct: d.correct, total: d.total,
+      percentage: Math.round((d.correct / d.total) * 100),
+    })),
+    status: payload.status,
+    questions,
+  };
+}
 
 export default function TestPage() {
   const router = useRouter();
@@ -60,13 +96,18 @@ export default function TestPage() {
         },
         body: JSON.stringify(payload),
       });
+
+      if (!res.ok) throw new Error('Submit failed');
       const result = await res.json();
       setSubmitted(true);
-      // Store result locally for results page
       localStorage.setItem('lastAttempt', JSON.stringify({ ...result, questions }));
       router.push(`/results/${result._id || 'local'}`);
     } catch {
-      setSubmitting(false);
+      // No auth or server error — build local result
+      const localResult = buildLocalResult(payload, questions);
+      localStorage.setItem('lastAttempt', JSON.stringify(localResult));
+      setSubmitted(true);
+      router.push('/results/local');
     }
   }, [submitting, submitted, onboarding, answers, questions, router]);
 
@@ -159,8 +200,8 @@ export default function TestPage() {
               <button key={s}
                 onClick={() => { setActiveSection(s); setCurrentIndex(0); }}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${activeSection === s
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
-                    : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+                  : 'bg-white/5 text-slate-400 hover:bg-white/10'
                   }`}
               >
                 {s} <span className="opacity-60">({s === 'mcq' ? mcqQuestions.length : codingQuestions.length})</span>
@@ -178,10 +219,10 @@ export default function TestPage() {
               return (
                 <button key={q._id} onClick={() => setCurrentIndex(i)}
                   className={`text-left px-3 py-2.5 rounded-xl text-xs transition-all border ${isActive
-                      ? 'bg-indigo-600/30 border-indigo-500/50 text-white'
-                      : isAnswered
-                        ? 'bg-green-500/10 border-green-500/20 text-green-300'
-                        : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                    ? 'bg-indigo-600/30 border-indigo-500/50 text-white'
+                    : isAnswered
+                      ? 'bg-green-500/10 border-green-500/20 text-green-300'
+                      : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200'
                     }`}
                 >
                   <div className="flex items-center gap-2">
@@ -243,8 +284,8 @@ export default function TestPage() {
                           whileTap={{ scale: 0.99 }}
                           onClick={() => setAnswer(question._id, { selectedOption: String(i) })}
                           className={`text-left px-5 py-4 rounded-xl border text-sm transition-all ${isSelected
-                              ? 'border-indigo-500 bg-indigo-500/20 text-white shadow-lg shadow-indigo-500/10'
-                              : 'border-white/10 bg-white/3 hover:border-indigo-400/50 hover:bg-white/5 text-slate-300'
+                            ? 'border-indigo-500 bg-indigo-500/20 text-white shadow-lg shadow-indigo-500/10'
+                            : 'border-white/10 bg-white/3 hover:border-indigo-400/50 hover:bg-white/5 text-slate-300'
                             }`}
                         >
                           <div className="flex items-start gap-3">
@@ -270,8 +311,8 @@ export default function TestPage() {
                         <button key={lang}
                           onClick={() => setSelectedLang(lang)}
                           className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedLang === lang
-                              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
-                              : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
+                            : 'bg-white/5 text-slate-400 hover:bg-white/10'
                             }`}
                         >
                           {lang === 'javascript' ? 'JS' : lang === 'python' ? 'Python' : 'Java'}
@@ -286,11 +327,11 @@ export default function TestPage() {
                       height="380px"
                     />
 
-                    {/* Test cases preview */}
+                    {/* Test cases + Run Code */}
                     {question.testCases && question.testCases.length > 0 && (
                       <div className="mt-4">
                         <p className="text-xs text-slate-400 mb-2 font-semibold uppercase tracking-wider">Test Cases</p>
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-2 mb-3">
                           {question.testCases.map((tc, i) => (
                             <div key={i} className="flex gap-3 text-xs bg-black/20 rounded-lg px-3 py-2 border border-white/5">
                               <span className="text-slate-500 shrink-0">Input:</span>
@@ -300,6 +341,10 @@ export default function TestPage() {
                             </div>
                           ))}
                         </div>
+                        <CodeRunner
+                          code={currentAnswer?.codeSubmission ?? (question.languageBoilerplate?.[selectedLang] || question.starterCode || '')}
+                          question={question}
+                        />
                       </div>
                     )}
                   </div>

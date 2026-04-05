@@ -16,10 +16,22 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // If id is 'local', load from localStorage (unauthenticated flow)
+    if (id === 'local') {
+      const stored = localStorage.getItem('lastAttempt');
+      if (stored) setAttempt(JSON.parse(stored));
+      setLoading(false);
+      return;
+    }
     api.attempts.get(id).then((data: any) => {
       setAttempt(data);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      // fallback to localStorage
+      const stored = localStorage.getItem('lastAttempt');
+      if (stored) setAttempt(JSON.parse(stored));
+      setLoading(false);
+    });
   }, [id]);
 
   if (loading) {
